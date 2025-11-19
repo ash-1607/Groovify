@@ -8,7 +8,7 @@ The architecture utilizes a **Backend-for-Frontend (BFF)** pattern deployed on V
 
 If you are a user, follow these steps to get the app running:
 
-1.  **Download the APK:** [Link to your `Groovify.apk` file on GitHub Releases or a hosting platform].
+1.  **Download the APK:** [Download Groovify APK](https://github.com/ash-1607/Groovify/releases/download/v1.0.0/Groovify.apk).
 2.  **Install:** Allow installation from unknown sources on your Android device if necessary.
 3.  **Log In:** Open the app and securely log in using your Spotify account.
 
