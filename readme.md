@@ -24,6 +24,7 @@ If you are a user, follow these steps to get the app running:
 ## ⚙️ Developer Setup & Architecture
 
 This section is for developers interested in contributing, reviewing the code, or running the project locally.
+<br>
 Note: This section is under updation so if you face any issues, wait for few days, or else contact me at ashmeetsidhu04@gmail.com.
 
 ### 🛠 Tech Stack
