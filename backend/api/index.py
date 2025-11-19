@@ -193,7 +193,7 @@ async def check_and_refresh_token(session_data: dict) -> bool:
 
 
 # 2. NEW DEPENDENCY for all mobile-authenticated routes
-async def get_current_mobile_session(authorization: str = Header(None)) -> dict:
+async def get_current_mobile_session(authorization: str =   (None)) -> dict:
     """
     This is our FastAPI "Dependency". Any endpoint that depends on this
     will first run this code to validate the user.
@@ -244,9 +244,16 @@ def logout(request: Request):
 async def get_user_profile_mobile(session_data: dict = Depends(get_current_mobile_session)):
     """
     Fetches the current user's profile from Spotify.
-    This route is now protected by our mobile auth dependency,
-    which validates the Bearer token and handles refresh.
-    This is used by the mobile app to "validate" a stored session on startup.
+
+    Parameters:
+        session_data (dict): The session data containing Spotify access tokens, provided by the mobile authentication dependency.
+
+    Returns:
+        dict: The user's Spotify profile information as returned by the Spotify API.
+
+    Raises:
+        HTTPException: If the Spotify API returns an error, the request fails, or authentication is invalid.
+        Other exceptions may be logged and re-raised as HTTPException for clarity.
     """
     access_token = session_data["access_token"]
     headers = {"Authorization": f"Bearer {access_token}"}
