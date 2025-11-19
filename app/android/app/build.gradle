@@ -115,12 +115,6 @@ android {
         }
     }
 }
-task printAppId {
-    doLast {
-        println android.defaultConfig.applicationId
-    }
-}
-
 
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin

@@ -10,7 +10,7 @@ import { NowPlayingResponse, UserProfile } from '../types'; // --- 2. UPDATED IM
 
 // // Define shapes
 // interface UserProfile {
-//   display_name: string; 
+//   display_name: string;
 //   email: string;
 //   id: string;
 // }
