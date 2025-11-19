@@ -1,55 +1,86 @@
-# Full-Stack Spotify Demo (FastAPI + React Native)
+# Groovify (Full-Stack Spotify AI Companion)
 
-A simple demo project that securely connects a React Native mobile app to the Spotify API using a FastAPI (Python) backend.
+Groovify is a secure, full-stack mobile application that enhances the Spotify user experience with generative AI, personalized analytics, and advanced data-driven features.
 
-This project uses a **Backend-for-Frontend (BFF)** pattern: the mobile app *only* talks to our backend, and the backend handles all secure OAuth and Spotify API calls.
+The architecture utilizes a **Backend-for-Frontend (BFF)** pattern deployed on Vercel to securely handle all OAuth authentication and third-party AI integrations.
 
-## Project Structure
+## 📱 User Guide & Installation
 
-This is a monorepo containing both the backend and frontend:
+If you are a user, follow these steps to get the app running:
 
-* `/backend`: The FastAPI (Python) server.
-* `/mobile-app`: The React Native (TypeScript) mobile application.
+1.  **Download the APK:** [Link to your `Groovify.apk` file on GitHub Releases or a hosting platform].
+2.  **Install:** Allow installation from unknown sources on your Android device if necessary.
+3.  **Log In:** Open the app and securely log in using your Spotify account.
 
-## How to Run
+### ✨ Key Features
 
-You will need **3 terminals** running at the same time.
+  * **🎧 Personalized Music Insights:** Groovify's advanced AI analyzes your listening history to generate witty, shareable summaries of your music taste and current mood.
+  * **💎 Rediscover Old Favorites:** The "Forgotten Gems" feature automatically curates a unique playlist of tracks you used to love but haven't played in a while, ensuring you never lose touch with your best tracks.
+  * **🎨 Instant Playlist Makeover:** Use the AI Playlist Artist to instantly create a stylish description and stunning, custom cover art for any playlist you own.
+  <!-- * **🔒 Seamless, Secure Experience:** Enjoy continuous access without repeated logins. Groovify handles authentication securely, providing a smooth, auto-login experience every time you open the app. -->
 
----
+-----
 
-### Terminal 1: Run the Backend (FastAPI)
+## ⚙️ Developer Setup & Architecture
 
-1.  Create a `.env` file in this folder with your Spotify API keys.
-2.  Install dependencies: `pip install -r requirements.txt`
-3.  Run the server:
+This section is for developers interested in contributing, reviewing the code, or running the project locally.
 
-```bash
-cd backend
-uvicorn app_step3:app --host 0.0.0.0 --port 8000
+### 🛠 Tech Stack
+
+| Component | Technology | Role |
+| :--- | :--- | :--- |
+| **Backend** | FastAPI (Python) | Secure Backend-for-Frontend (BFF), API, and OAuth handler. |
+| **Mobile** | React Native / TypeScript | Cross-platform client application (iOS/Android). |
+| **AI/ML** | OpenRouter (Grok-4) & Clipdrop | Generative AI for analysis and image creation. |
+| **Deployment** | **Vercel** | Production hosting for the FastAPI BFF server. |
+
+### 📝 Prerequisites
+
+  * Python 3.10+
+  * Node.js & npm
+  * `ngrok` CLI tool
+  * Spotify Developer App credentials
+  * API keys for OpenRouter and Clipdrop
+
+### 🔑 Configuration (`.env`)
+
+In your `/backend` directory, create a `.env` file containing your secrets. The `SPOTIFY_REDIRECT_URI` must match your Spotify Dashboard setting and will use the `ngrok` URL for local development.
+
 ```
-### Terminal 2: Run the Tunnel (ngrok)
-
-Spotify's API requires a public HTTPS URL.
-```bash
-ngrok http 8000
+SPOTIFY_CLIENT_ID=...
+SPOTIFY_CLIENT_SECRET=...
+SPOTIFY_REDIRECT_URI=https://<your-ngrok-url>.app/callback
+APP_SECRET_KEY=... (random 32-char key)
+OPENROUTER_API_KEY=...
+CLIPDROP_API_KEY=...
 ```
 
-**IMPORTANT**: You must copy the https URL from ngrok and paste it into:
+### 🏃 Local Run Instructions
 
-1. Your Spotify Developer Dashboard (as a Redirect URI).
+You need **three terminals** open to run the full stack locally:
 
-2. Your backend/.env file.
+1.  **Backend (Terminal 1):**
+    ```bash
+    cd backend
+    uvicorn app_step3:app --host 0.0.0.0 --port 8000 --reload
+    ```
+2.  **ngrok Tunnel (Terminal 2):**
+      * This is required because Spotify OAuth demands an HTTPS redirect URI, even for local development.
+    ```bash
+    ngrok http 8000
+    ```
+3.  **Mobile App (Terminal 3):**
+    ```bash
+    cd mobile-app
+    npx react-native run-ios # or run-android
+    ```
+    ***Remember to update the `API_BASE_URL` in `mobile-app/src/api.ts` to the ngrok URL\!***
 
-3. Your mobile-app/src/api.ts file.
+<!-- ## 🤝 Contributing
 
-### Terminal 3: Run the Mobile App (React Native)
-1. Install dependencies: 
-```bash
-npm cd mobile-app
-```
-2. Run the app
-```bash
-npx react-native run-ios
-# OR
-npx react-native run-android
-```
+(Add your contribution guidelines here, e.g., how to file issues, or if you are not accepting pull requests.)
+
+-----
+
+**Do you want to add a contribution guide or a license section, or are you ready to use this README?** -->
+
