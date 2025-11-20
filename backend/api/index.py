@@ -606,7 +606,7 @@ async def get_ai_analysis(session_data: dict = Depends(get_current_mobile_sessio
             }
             # Note: httpx's `json` parameter automatically sets 'Content-Type: application/json'
             payload = {
-                "model": "deepseek/deepseek-chat-v3.1:free", 
+                "model": "x-ai/grok-4.1-fast", 
                 "messages": [{"role": "user", "content": prompt}],
             }
             logger.info("Sending request...")
@@ -738,7 +738,7 @@ async def generate_ai_cover(playlist_id: str, session_data: dict = Depends(get_c
             )
             headers_openrouter = {"Authorization": f"Bearer {openrouter_key}"}
             payload = {
-                "model": "deepseek/deepseek-chat-v3.1:free",
+                "model": "x-ai/grok-4.1-fast",
                 "messages": [{"role": "user", "content": prompt_input}],
                 "max_tokens": 50,
             }
