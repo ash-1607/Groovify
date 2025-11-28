@@ -704,86 +704,166 @@ async def generate_ai_description(playlist_id: str, session_data: dict = Depends
         logger.exception(f"Error generating AI description: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate playlist description.")
 
-def process_and_compress_image(image_bytes: bytes, max_target_bytes: int) -> bytes:
-    """
-    Resizes and compresses an image until it fits within max_target_bytes.
-    Returns the compressed JPEG bytes.
-    """
-    try:
-        img = Image.open(BytesIO(image_bytes)).convert("RGB")
-    except Exception:
-        raise HTTPException(status_code=500, detail="Generated image unreadable.")
 
-    # 1. Resize first (Speed up processing and reduce size immediately)
-    # Spotify covers are small, we don't need 1024x1024. 512x512 is plenty.
-    img.thumbnail((512, 512), Image.Resampling.LANCZOS)
-
-    # 2. Iterative Compression
-    quality = 95
-    while quality >= 10:
-        buf = BytesIO()
-        img.save(buf, format="JPEG", quality=quality, optimize=True)
-        data = buf.getvalue()
-        
-        if len(data) <= max_target_bytes:
-            return data
-        
-        # Drop quality faster if we are far off
-        quality -= 10 if len(data) < max_target_bytes * 1.5 else 5
-
-    raise HTTPException(status_code=500, detail="Could not compress image enough for Spotify.")
-
+# Refined endpoint
 @app.post("/playlist/{playlist_id}/ai-cover")
 async def generate_ai_cover(playlist_id: str, session_data: dict = Depends(get_current_mobile_session)):
     access_token = session_data["access_token"]
     headers_spotify = {"Authorization": f"Bearer {access_token}"}
-    
-    # ... (Setup keys and paths) ...
-    
-    # ✅ FIX: Target 180KB so Base64 stays under 256KB
-    MAX_BINARY_BYTES = 180 * 1024 
+    openrouter_key = os.getenv("OPENROUTER_API_KEY")
+    clipdrop_key = os.getenv("CLIPDROP_API_KEY")
+
+    if not openrouter_key or not clipdrop_key:
+        raise HTTPException(status_code=500, detail="AI services are not configured.")
+
+    # Debug file paths (dev only) - change on Windows (e.g., C:\\temp\\...)
+    debug_dir = "/tmp/grokai_debug"
+    pathlib.Path(debug_dir).mkdir(parents=True, exist_ok=True)
+    raw_debug_path = os.path.join(debug_dir, f"{playlist_id}_raw")
+    jpeg_debug_path = os.path.join(debug_dir, f"{playlist_id}_jpeg.jpg")
+
+    MAX_BYTES = 180 * 1024  # spotify limit
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            # 1. Get Context
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            # 1) Fetch playlist name for context
             playlist_resp = await client.get(f"{API_BASE}/playlists/{playlist_id}", headers=headers_spotify)
             playlist_resp.raise_for_status()
-            playlist_name = playlist_resp.json().get("name", "playlist")
+            playlist_name = playlist_resp.json().get("name", "a playlist")
+            logger.info(f"Generating cover for playlist '{playlist_name}' ({playlist_id})")
 
-            # 2. Get Visual Prompt (Grok)
-            prompt_payload = {
+            # 2) Ask OpenRouter (Grok) for a short visual prompt
+            prompt_input = (
+                f"Based on a playlist named '{playlist_name}', write a 15-word visually descriptive prompt "
+                "for an image AI to generate a cover art. Focus on mood and style. No text in the image."
+            )
+            headers_openrouter = {"Authorization": f"Bearer {openrouter_key}"}
+            payload = {
                 "model": "x-ai/grok-4.1-fast",
-                "messages": [{"role": "user", "content": f"Write a 10-word visual description for a playlist named '{playlist_name}'. No text."}]
+                "messages": [{"role": "user", "content": prompt_input}],
+                "max_tokens": 50,
             }
-            # ... (Call OpenRouter) ...
-            visual_prompt = resp_prompt.json()["choices"][0]["message"]["content"]
+            resp_prompt = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers_openrouter,
+                json=payload,
+                timeout=30.0,
+            )
+            resp_prompt.raise_for_status()
+            visual_prompt = resp_prompt.json()["choices"][0]["message"]["content"].strip()
 
-            # 3. Generate Image (Clipdrop)
-            # ... (Call Clipdrop) ...
+            idx = visual_prompt.rfind('.')
+
+            visual_prompt = visual_prompt[: idx + 1].strip()
+
+            logger.info("Got visual prompt from AI.")
+            logger.debug(f"Visual prompt: {visual_prompt}")
+
+            # 3) Call Clipdrop to generate image (send JSON)
+            clipdrop_url = "https://clipdrop-api.co/text-to-image/v1"
+            headers_clipdrop = {"x-api-key": clipdrop_key, "Content-Type": "application/json"}
+            clip_payload = {"prompt": visual_prompt}
+            resp_image = await client.post(clipdrop_url, headers=headers_clipdrop, json=clip_payload, timeout=120.0)
+            resp_image.raise_for_status()
             image_bytes = resp_image.content
+            ct = resp_image.headers.get("content-type", "<unknown>")
+            logger.info(f"Clipdrop returned content-type={ct}, size_bytes={len(image_bytes)}")
 
-            # 4. ✅ CLEANER: Use the helper function
-            # This runs synchronous CPU code (Pillow) in a thread to avoid blocking the async server
-            jpeg_bytes = await asyncio.to_thread(process_and_compress_image, image_bytes, MAX_BINARY_BYTES)
+            # Save raw clipdrop bytes for inspection (dev)
+            try:
+                with open(raw_debug_path, "wb") as f:
+                    f.write(image_bytes)
+                logger.debug(f"Saved raw Clipdrop bytes to {raw_debug_path}")
+            except Exception as e:
+                logger.warning(f"Could not save raw debug image: {e}")
 
-            # 5. Upload to Spotify
+            # 4) Convert to JPEG and compress until <= MAX_BYTES
+            jpeg_bytes = None
+            try:
+                img = Image.open(BytesIO(image_bytes)).convert("RGB")
+            except Exception as e:
+                logger.exception("Failed to open image returned by Clipdrop")
+                raise HTTPException(status_code=500, detail="Generated image unreadable (format error).")
+
+            # Try progressive quality reduction
+            quality = 95
+            while quality >= 25:
+                buf = BytesIO()
+                try:
+                    img.save(buf, format="JPEG", quality=quality, optimize=True)
+                except Exception:
+                    # fallback if optimize not supported
+                    img.save(buf, format="JPEG", quality=quality)
+                data = buf.getvalue()
+                logger.debug(f"Try quality={quality} -> size={len(data)}")
+                if len(data) <= MAX_BYTES:
+                    jpeg_bytes = data
+                    break
+                quality -= 10
+
+            # If still too large, try resizing once and recompressing
+            if jpeg_bytes is None:
+                try:
+                    w, h = img.size
+                    img2 = img.resize((int(w * 0.8), int(h * 0.8)), Image.LANCZOS)
+                    buf = BytesIO()
+                    img2.save(buf, format="JPEG", quality=60, optimize=True)
+                    data = buf.getvalue()
+                    logger.debug(f"After resize -> size={len(data)}")
+                    if len(data) <= MAX_BYTES:
+                        jpeg_bytes = data
+                        img = img2
+                except Exception as e:
+                    logger.exception("Resize attempt failed")
+
+            if jpeg_bytes is None:
+                logger.error("Generated image >256KB and compression/resizing failed")
+                raise HTTPException(status_code=500, detail="Generated image too large for Spotify (>256 KB). Try a simpler prompt or enable Pillow compression.")
+
+            # Save debug JPEG
+            try:
+                with open(jpeg_debug_path, "wb") as f:
+                    f.write(jpeg_bytes)
+                logger.info(f"Saved compressed debug image to {jpeg_debug_path} (size={len(jpeg_bytes)})")
+            except Exception as e:
+                logger.warning(f"Could not write compressed debug image: {e}")
+
+            # 5) Upload to Spotify (raw JPEG bytes)
             b64_image = base64.b64encode(jpeg_bytes).decode("utf-8")
-            
-            # Spotify requires strict Content-Type even for Base64 data
+
             headers_upload = headers_spotify.copy()
             headers_upload["Content-Type"] = "image/jpeg"
-            
-            await client.put(
+            upload_resp = await client.put(
                 f"{API_BASE}/playlists/{playlist_id}/images",
                 headers=headers_upload,
-                content=b64_image,
-                timeout=30.0
+                content=b64_image,   # ✅ base64 string
+                timeout=30.0,
             )
 
-            # 6. Return new URL
-            # ... (Existing logic to fetch URL) ...
-            return {"imageUrl": new_url}
+            if upload_resp.status_code not in (200, 202):
+                logger.error("Spotify upload failed", {"status": upload_resp.status_code, "text": upload_resp.text})
+                raise HTTPException(status_code=upload_resp.status_code, detail=f"Spotify image upload failed: {upload_resp.text}")
 
+            logger.info("Spotify upload accepted.")
+
+            # 6) Wait briefly for Spotify CDN to update, then fetch playlist details
+            await asyncio.sleep(2)
+            final_details_resp = await client.get(f"{API_BASE}/playlists/{playlist_id}", headers=headers_spotify)
+            final_details_resp.raise_for_status()
+            images = final_details_resp.json().get("images", [])
+            new_image_url = images[0]["url"] if images else None
+
+            logger.info(f"Returning imageUrl: {new_image_url}")
+            return {"imageUrl": new_image_url}
+
+    except httpx.HTTPStatusError as e:
+        # external API error: Clipdrop/OpenRouter/Spotify network response with error code
+        logger.exception(f"Error generating AI cover - HTTP: {e.response.status_code} {e.response.text}")
+        # If it's an external provider error, surface the message but map to 502 (bad gateway)
+        raise HTTPException(status_code=502, detail=f"External API error: {e.response.text}")
+    except HTTPException:
+        # re-raise HTTPErrors we created above
+        raise
     except Exception as e:
-        logger.exception(f"AI Cover Failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"Unhandled error generating AI cover: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate playlist cover.")
