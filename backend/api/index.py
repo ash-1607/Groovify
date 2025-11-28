@@ -90,11 +90,11 @@ def oauth_url(state: str) -> str:
     }
     return f"{AUTH_BASE}?{urlencode(params)}"
 
-@app.get("/", response_class=HTMLResponse)
-def root(request: Request):
-    if "spotify_tokens" in request.session:
-        return "<p>✅ Logged in — <a href='/me'>/me</a> | <a href='/logout'>Logout</a></p>"
-    return "<p>❌ Not logged in — <a href='/login'>Login with Spotify</a></p>"
+# @app.get("/", response_class=HTMLResponse)
+# def root(request: Request):
+#     if "spotify_tokens" in request.session:
+#         return "<p>✅ Logged in — <a href='/me'>/me</a> | <a href='/logout'>Logout</a></p>"
+#     return "<p>❌ Not logged in — <a href='/login'>Login with Spotify</a></p>"
 
 @app.get("/login")
 def login(request: Request):
@@ -286,10 +286,10 @@ async def get_current_mobile_session(authorization: str = Header(None)) -> dict:
     # Finally, return the valid (and possibly refreshed) session data
     return session_data
 
-@app.get("/logout")
-def logout(request: Request):
-    request.session.clear()
-    return RedirectResponse("/")
+# @app.get("/logout")
+# def logout(request: Request):
+#     request.session.clear()
+#     return RedirectResponse("/")
 
 # --- DELETE your old @app.get("/me") function ---
 # --- ADD this new version. It's almost identical to your /playlists endpoint ---
